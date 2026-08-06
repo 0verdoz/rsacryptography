@@ -1,0 +1,1621 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RSA Interactive Visualizer — Stallings, Ch. 9</title>
+<style>
+  /* ---------- Presentation-friendly, high-contrast styling ----------
+     Light background + near-black text projects reliably on classroom
+     projectors (poor black levels wash out dark themes). Key numbers are
+     deliberately oversized so they read from the back of the room. */
+
+  :root{
+    --bg:        #eef1f5;
+    --panel:     #ffffff;
+    --ink:       #0e141b;
+    --ink-soft:  #4a5763;
+    --line:      #c3ccd6;
+    --line-soft: #e2e8ee;
+    --pub:       #0a4fa0;   /* public key accent  */
+    --pub-bg:    #e7f0fb;
+    --priv:      #8c2703;   /* private key accent */
+    --priv-bg:   #fdefe7;
+    --ok:        #0c6b3f;
+    --ok-bg:     #e6f4ec;
+    --err:       #a81d15;
+    --err-bg:    #fdeceb;
+    --mono: "Cascadia Mono", "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+  }
+
+  *{ box-sizing:border-box; }
+
+  html{ font-size:17px; }
+
+  body{
+    margin:0;
+    padding:0 0 5rem;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:"Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  .wrap{ max-width:1180px; margin:0 auto; padding:0 1.25rem; }
+
+  /* ---------- Header ---------- */
+  header{
+    background:#0e141b;
+    color:#fff;
+    padding:1.5rem 0 1.35rem;
+    border-bottom:5px solid var(--pub);
+  }
+  header h1{
+    margin:0;
+    font-size:2.1rem;
+    letter-spacing:-0.02em;
+  }
+  header p{
+    margin:.4rem 0 0;
+    color:#b9c4d0;
+    font-size:1.02rem;
+  }
+  .toolbar{
+    display:flex; flex-wrap:wrap; gap:.75rem; align-items:center;
+    margin-top:1.1rem;
+  }
+  button{
+    font:inherit; font-weight:600;
+    background:#ffd233; color:#0e141b;
+    border:none; border-radius:7px;
+    padding:.6rem 1.1rem;
+    cursor:pointer;
+  }
+  button:hover{ background:#ffdd63; }
+  button:active{ transform:translateY(1px); }
+  button:focus-visible{ outline:3px solid #fff; outline-offset:2px; }
+  button.ghost{
+    background:transparent; color:#dfe6ee; border:2px solid #47525e;
+  }
+  button.ghost:hover{ background:#1c242e; }
+  .hint{ color:#93a1b0; font-size:.92rem; }
+
+  /* ---------- Stage panels ---------- */
+  section.stage{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:12px;
+    margin-top:1.5rem;
+    overflow:hidden;
+    box-shadow:0 1px 3px rgba(14,20,27,.09);
+  }
+  .stage > h2{
+    margin:0;
+    padding:.85rem 1.35rem;
+    font-size:1.35rem;
+    background:#f5f7fa;
+    border-bottom:1px solid var(--line);
+    display:flex; align-items:center; gap:.75rem;
+  }
+  .badge{
+    display:inline-flex; align-items:center; justify-content:center;
+    min-width:2rem; height:2rem;
+    border-radius:50%;
+    background:var(--pub); color:#fff;
+    font-size:1.05rem; font-weight:700;
+  }
+  .stage-body{ padding:1.35rem; }
+
+  .note{
+    margin:0 0 1.15rem;
+    color:var(--ink-soft);
+    font-size:.99rem;
+  }
+  .note code, .inline-code{
+    font-family:var(--mono);
+    background:var(--line-soft);
+    padding:.05em .35em;
+    border-radius:4px;
+  }
+
+  /* ---------- Inputs ---------- */
+  .inputs{
+    display:flex; flex-wrap:wrap; gap:1.15rem;
+    margin-bottom:1.25rem;
+  }
+  .field{ min-width:210px; flex:1 1 210px; }
+  .field label{
+    display:block;
+    font-weight:700; font-size:1.02rem;
+    margin-bottom:.3rem;
+  }
+  .field label .sub{ font-weight:400; color:var(--ink-soft); font-size:.9rem; }
+  .field input{
+    width:100%;
+    font-family:var(--mono);
+    font-size:1.5rem;
+    padding:.5rem .65rem;
+    border:2px solid var(--line);
+    border-radius:8px;
+    background:#fff; color:var(--ink);
+  }
+  .field input:focus{ outline:none; border-color:var(--pub); box-shadow:0 0 0 3px rgba(10,79,160,.18); }
+  .field.invalid input{ border-color:var(--err); background:#fffafa; }
+
+  .msg{ margin-top:.35rem; font-size:.95rem; min-height:1.25rem; }
+  .msg.error{ color:var(--err); font-weight:600; }
+  .msg.ok{ color:var(--ok); }
+
+  /* ---------- Derived value chips ---------- */
+  .values{
+    display:flex; flex-wrap:wrap; gap:.9rem;
+    margin-bottom:1.25rem;
+  }
+  .val{
+    flex:1 1 200px; min-width:190px;
+    border:2px solid var(--line);
+    border-radius:10px;
+    padding:.7rem .9rem;
+    background:#fbfcfd;
+  }
+  .val .k{
+    font-size:.95rem; font-weight:700; color:var(--ink-soft);
+    text-transform:none; letter-spacing:.01em;
+  }
+  .val .v{
+    font-family:var(--mono);
+    font-size:2.15rem; font-weight:700;
+    line-height:1.15;
+    overflow-wrap:anywhere;
+  }
+  .val .formula{ font-size:.9rem; color:var(--ink-soft); font-family:var(--mono); }
+  .val.pub{ border-color:var(--pub); background:var(--pub-bg); }
+  .val.pub .v{ color:var(--pub); }
+  .val.priv{ border-color:var(--priv); background:var(--priv-bg); }
+  .val.priv .v{ color:var(--priv); }
+  .val.big .v{ font-size:2.6rem; }
+  .val.dim .v{ color:#93a1b0; }
+
+  .keypair{ display:flex; flex-wrap:wrap; gap:1rem; margin:1.4rem 0 .5rem; }
+  .keybox{
+    flex:1 1 300px;
+    border:3px solid var(--pub); border-radius:12px;
+    padding:.9rem 1.1rem; background:var(--pub-bg);
+  }
+  .keybox.private{ border-color:var(--priv); background:var(--priv-bg); }
+  .keybox h3{
+    margin:0 0 .3rem; font-size:1.1rem;
+    color:var(--pub); text-transform:uppercase; letter-spacing:.05em;
+  }
+  .keybox.private h3{ color:var(--priv); }
+  .keybox .kv{
+    font-family:var(--mono); font-size:2.1rem; font-weight:700;
+    color:var(--pub); overflow-wrap:anywhere;
+  }
+  .keybox.private .kv{ color:var(--priv); }
+  .keybox .cap{ font-size:.92rem; color:var(--ink-soft); margin-top:.2rem; }
+
+  /* ---------- Steps / tables ---------- */
+  details.steps{
+    border:1px solid var(--line);
+    border-radius:9px;
+    margin-top:1.1rem;
+    background:#fbfcfd;
+  }
+  details.steps > summary{
+    cursor:pointer;
+    padding:.65rem 1rem;
+    font-weight:700;
+    list-style:none;
+    display:flex; align-items:center; gap:.5rem;
+  }
+  details.steps > summary::-webkit-details-marker{ display:none; }
+  details.steps > summary::before{ content:"▶"; font-size:.8rem; color:var(--ink-soft); }
+  details.steps[open] > summary::before{ content:"▼"; }
+  details.steps > summary:hover{ background:#f2f5f8; }
+  .steps-body{ padding:0 1rem 1rem; }
+
+  .table-wrap{ overflow:auto; max-height:30rem; border:1px solid var(--line); border-radius:7px; background:#fff; }
+  table{ border-collapse:collapse; width:100%; font-family:var(--mono); font-size:1.02rem; }
+  th, td{ padding:.42rem .7rem; text-align:right; border-bottom:1px solid var(--line-soft); white-space:nowrap; }
+  th{
+    background:#0e141b; color:#fff; font-weight:700;
+    position:sticky; top:0; z-index:1;
+    border-bottom:2px solid #0e141b;
+  }
+  td.left, th.left{ text-align:left; }
+  tbody tr:nth-child(even){ background:#f7f9fb; }
+  tbody tr.hit{ background:var(--ok-bg); }
+  tbody tr.final td{ font-weight:700; border-top:2px solid var(--ink); }
+  .bit1{ color:var(--pub); font-weight:700; }
+  .bit0{ color:#8d99a6; }
+
+  .caption{ font-size:.93rem; color:var(--ink-soft); margin:.6rem 0 0; }
+
+  /* ---------- Banners ---------- */
+  .banner{
+    border-radius:9px; padding:.8rem 1.05rem; margin:1.1rem 0 0;
+    font-size:1.05rem; border:2px solid;
+  }
+  .banner.ok   { background:var(--ok-bg);  border-color:var(--ok);  color:var(--ok); }
+  .banner.err  { background:var(--err-bg); border-color:var(--err); color:var(--err); }
+  .banner.wait { background:#f4f6f9; border-color:var(--line); color:var(--ink-soft); }
+  .banner strong{ font-weight:700; }
+  .banner .num-inline{ font-family:var(--mono); }
+
+  .hidden{ display:none !important; }
+
+  .binary{
+    font-family:var(--mono); font-size:1.35rem; letter-spacing:.12em;
+    word-break:break-all;
+  }
+
+  /* ---------- Stage 4: cost-to-break charts ----------
+     Chart colors are the validated categorical slots 1 and 2. Checked with the
+     palette validator against this page's white chart surface: worst-pair CVD
+     ΔE 24.7 (protan), normal-vision ΔE 33.6, both marks ≥ 3:1 on the surface.
+     Do not substitute other hues without re-validating. */
+  .viz{
+    --surface-1: #ffffff;   /* chart surface */
+    --series-1:  #2a78d6;   /* blue   — trial division */
+    --series-2:  #eb6834;   /* orange — number field sieve */
+    --grid:      #e1e0d9;   /* hairline gridline, one step off surface */
+    --axis:      #c3c2b7;   /* baseline */
+    --axis-ink:  #4a5763;   /* axis labels — darker than the usual muted token,
+                               because this gets projected across a lecture hall */
+    --status-critical:#d03b3b;
+    --status-good:    #0a7d0a;
+  }
+
+  /* KPI row — these are single headline numbers, so they are stat tiles, not charts */
+  .kpi{
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(215px,1fr));
+    gap:.9rem; margin-bottom:1.35rem;
+  }
+  .stat{
+    border:1px solid var(--line); border-radius:10px;
+    padding:.75rem .95rem; background:#fbfcfd;
+  }
+  .stat .lbl{ font-size:.93rem; color:var(--ink-soft); }
+  .stat .num{
+    font-size:2.05rem; font-weight:700; line-height:1.15;
+    overflow-wrap:anywhere;   /* proportional figures: no tabular-nums on display numbers */
+  }
+  .stat .sub{ font-size:.88rem; color:var(--ink-soft); margin-top:.1rem; }
+  .stat.critical{ border-color:var(--status-critical); background:#fdf1f1; }
+  .stat.critical .num{ color:var(--status-critical); }
+  .stat.good{ border-color:var(--status-good); background:#eefaee; }
+  .stat.good .num{ color:var(--status-good); }
+  .stat .flag{ font-size:.88rem; font-weight:700; }
+  .stat.critical .flag{ color:var(--status-critical); }
+  .stat.good .flag{ color:var(--status-good); }
+
+  /* Two charts rather than one dual-scale chart: trial division and the number
+     field sieve differ by ~200 orders of magnitude, so a shared y-axis would
+     flatten the sieve curve into the baseline. Small multiples instead. */
+  .charts{
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(430px,1fr));
+    gap:1.15rem;
+  }
+  .chart-card{
+    margin:0; border:1px solid var(--line); border-radius:10px;
+    padding:1rem 1.1rem 1.1rem; background:var(--surface-1);
+  }
+  .chart-card figcaption{
+    font-weight:700; font-size:1.08rem;
+    display:flex; align-items:center; gap:.55rem;
+  }
+  .keyline{ display:inline-block; width:22px; height:3px; border-radius:2px; flex:none; }
+  .chart-sub{ font-size:.92rem; color:var(--ink-soft); margin:.2rem 0 .7rem; }
+  .plot-wrap{ position:relative; }
+  .plot-wrap svg{ display:block; width:100%; height:auto; }
+  .plot-wrap:focus-visible{ outline:3px solid var(--pub); outline-offset:3px; border-radius:6px; }
+
+  .tip{
+    position:absolute; pointer-events:none; z-index:5;
+    background:#0e141b; color:#fff;
+    padding:.45rem .65rem; border-radius:7px;
+    font-size:.92rem; line-height:1.4; white-space:nowrap;
+    transform:translate(-50%,-118%);
+    opacity:0; transition:opacity .08s ease;
+    box-shadow:0 2px 8px rgba(14,20,27,.3);
+  }
+  .tip.below{ transform:translate(-50%,22%); }   /* flip under the point near the top edge */
+  .tip.on{ opacity:1; }
+  .tip .tv{ font-weight:700; font-size:1.06rem; }        /* value leads */
+  .tip .tl{ color:#b9c4d0; }                              /* label follows */
+  .tip .tk{ display:inline-block; width:16px; height:3px; border-radius:2px; vertical-align:middle; margin-right:.4rem; }
+
+  .tbl-btn{
+    background:transparent; color:var(--ink-soft);
+    border:1px solid var(--line); border-radius:6px;
+    font-size:.9rem; font-weight:600; padding:.35rem .7rem; margin-top:.7rem;
+  }
+  .tbl-btn:hover{ background:#f2f5f8; color:var(--ink); }
+  .data-table table{ font-size:.95rem; margin-top:.6rem; }
+  .data-table th{ font-size:.9rem; }
+
+  @media (max-width:640px){
+    html{ font-size:15px; }
+    .val .v{ font-size:1.7rem; }
+    .val.big .v{ font-size:2rem; }
+    .charts{ grid-template-columns:1fr; }
+    .chart-card{ padding:.8rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <h1>RSA Interactive Visualizer</h1>
+    <p>Key generation · Encryption · Decryption — following Stallings, <em>Cryptography and Network Security</em>, Chapter 9</p>
+    <div class="toolbar">
+      <button id="resetBtn" type="button">↺ Reset to textbook example</button>
+      <button class="ghost" id="expandBtn" type="button">Expand all steps</button>
+      <span class="hint">Textbook example: p = 17, q = 11, e = 7, M = 88</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- =============== STAGE 1: KEY GENERATION =============== -->
+  <section class="stage">
+    <h2><span class="badge">1</span> Key Generation</h2>
+    <div class="stage-body">
+      <p class="note">
+        Pick two distinct primes <code>p</code> and <code>q</code>. Their product
+        <code>n = p × q</code> is the <em>modulus</em>, public to everybody. Euler's totient
+        <code>φ(n) = (p−1)(q−1)</code> counts the integers below <code>n</code> that are coprime to it —
+        it stays secret, because knowing it is equivalent to knowing the private key.
+      </p>
+
+      <div class="inputs">
+        <div class="field" id="f-p">
+          <label for="in-p">p <span class="sub">— prime</span></label>
+          <input id="in-p" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="17">
+          <div class="msg" id="msg-p"></div>
+        </div>
+        <div class="field" id="f-q">
+          <label for="in-q">q <span class="sub">— prime, distinct from p</span></label>
+          <input id="in-q" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="11">
+          <div class="msg" id="msg-q"></div>
+        </div>
+      </div>
+
+      <div class="values">
+        <div class="val big" id="v-n">
+          <div class="k">n — modulus</div>
+          <div class="v" id="out-n">—</div>
+          <div class="formula" id="f-n">n = p × q</div>
+        </div>
+        <div class="val big" id="v-phi">
+          <div class="k">φ(n) — totient (secret)</div>
+          <div class="v" id="out-phi">—</div>
+          <div class="formula" id="f-phi">φ(n) = (p−1)(q−1)</div>
+        </div>
+      </div>
+
+      <div class="inputs">
+        <div class="field" id="f-e">
+          <label for="in-e">e <span class="sub">— public exponent, 1 &lt; e &lt; φ(n), gcd(e, φ(n)) = 1</span></label>
+          <input id="in-e" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="7">
+          <div class="msg" id="msg-e"></div>
+        </div>
+        <div class="field">
+          <label>d <span class="sub">— private exponent, d = e⁻¹ mod φ(n)</span></label>
+          <div class="val priv" style="margin:0">
+            <div class="v" id="out-d">—</div>
+            <div class="formula" id="f-d">e × d ≡ 1 (mod φ(n))</div>
+          </div>
+        </div>
+      </div>
+
+      <details class="steps" id="det-eea">
+        <summary>Extended Euclidean algorithm — computing d = e⁻¹ mod φ(n)</summary>
+        <div class="steps-body">
+          <p class="caption" id="eea-intro"></p>
+          <div class="table-wrap"><table id="tbl-eea"></table></div>
+          <p class="caption">
+            Stallings' tabular form of Extended Euclid(m, b) with m = φ(n), b = e. Each row keeps
+            two triples (A1, A2, A3) and (B1, B2, B3) satisfying the invariant
+            <span class="inline-code">m·A1 + b·A2 = A3</span> and
+            <span class="inline-code">m·B1 + b·B2 = B3</span>.
+            We repeatedly divide, exactly like ordinary Euclid, until B3 = 1. At that moment
+            <span class="inline-code">m·B1 + e·B2 = 1</span>, so reducing mod m gives
+            <span class="inline-code">e·B2 ≡ 1 (mod m)</span> — that is, B2 is the inverse d.
+            (If B3 reaches 0 instead, gcd ≠ 1 and no inverse exists.)
+          </p>
+        </div>
+      </details>
+
+      <div class="keypair" id="keypair">
+        <div class="keybox">
+          <h3>🔓 Public key PU</h3>
+          <div class="kv" id="out-pub">{ e, n }</div>
+          <div class="cap">Published freely. Used to encrypt: C = M<sup>e</sup> mod n</div>
+        </div>
+        <div class="keybox private">
+          <h3>🔒 Private key PR</h3>
+          <div class="kv" id="out-priv">{ d, n }</div>
+          <div class="cap">Kept secret. Used to decrypt: M = C<sup>d</sup> mod n</div>
+        </div>
+      </div>
+
+      <div class="banner err hidden" id="ban-keys"></div>
+      <div class="banner ok hidden" id="ban-keyok"></div>
+    </div>
+  </section>
+
+  <!-- =============== STAGE 2: ENCRYPTION =============== -->
+  <section class="stage">
+    <h2><span class="badge">2</span> Encryption &nbsp;<span style="font-weight:400;font-size:1rem;color:var(--ink-soft)">C = M<sup>e</sup> mod n</span></h2>
+    <div class="stage-body">
+      <p class="note">
+        The plaintext is a <em>number</em> M with <code>0 ≤ M &lt; n</code>. (Real messages are chopped into
+        blocks small enough to satisfy this.) Anyone holding the public key can compute the ciphertext.
+      </p>
+
+      <div class="inputs">
+        <div class="field" id="f-m">
+          <label for="in-m">M <span class="sub">— plaintext, must be less than n</span></label>
+          <input id="in-m" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="88">
+          <div class="msg" id="msg-m"></div>
+        </div>
+      </div>
+
+      <div class="values">
+        <div class="val big pub" id="v-c">
+          <div class="k">C — ciphertext</div>
+          <div class="v" id="out-c">—</div>
+          <div class="formula" id="f-c">C = M<sup>e</sup> mod n</div>
+        </div>
+      </div>
+
+      <details class="steps" id="det-enc">
+        <summary>Square-and-multiply — walking through M<sup>e</sup> mod n</summary>
+        <div class="steps-body" id="enc-steps"></div>
+      </details>
+
+      <div class="banner err hidden" id="ban-enc"></div>
+    </div>
+  </section>
+
+  <!-- =============== STAGE 3: DECRYPTION =============== -->
+  <section class="stage">
+    <h2><span class="badge">3</span> Decryption &nbsp;<span style="font-weight:400;font-size:1rem;color:var(--ink-soft)">M = C<sup>d</sup> mod n</span></h2>
+    <div class="stage-body">
+      <p class="note">
+        The holder of the private key raises the ciphertext to the power <code>d</code>. Because
+        <code>e·d ≡ 1 (mod φ(n))</code>, Euler's theorem guarantees
+        <code>(M<sup>e</sup>)<sup>d</sup> ≡ M (mod n)</code> — the original plaintext comes back exactly.
+      </p>
+
+      <div class="values">
+        <div class="val big priv" id="v-m2">
+          <div class="k">Recovered plaintext</div>
+          <div class="v" id="out-m2">—</div>
+          <div class="formula" id="f-m2">M = C<sup>d</sup> mod n</div>
+        </div>
+      </div>
+
+      <details class="steps" id="det-dec">
+        <summary>Square-and-multiply — walking through C<sup>d</sup> mod n</summary>
+        <div class="steps-body" id="dec-steps"></div>
+      </details>
+
+      <div class="banner ok hidden"   id="ban-dec-ok"></div>
+      <div class="banner err hidden"  id="ban-dec-err"></div>
+      <div class="banner wait hidden" id="ban-dec-wait"></div>
+    </div>
+  </section>
+
+  <!-- =============== STAGE 4: HOW HARD IS IT TO BREAK? =============== -->
+  <section class="stage viz">
+    <h2><span class="badge">4</span> How long would it take to break?</h2>
+    <div class="stage-body">
+      <p class="note">
+        Everything an attacker needs is hidden behind one problem: <strong>factoring n back into p and q</strong>.
+        Recover those and φ(n) = (p−1)(q−1) falls out, and then d is just one more run of the extended
+        Euclidean algorithm — the same one in Stage 1. So the security of the whole scheme is exactly the
+        cost of factoring, and that cost is what the charts below plot as p and q grow.
+      </p>
+
+      <div class="kpi" id="kpi"></div>
+
+      <div class="banner err hidden" id="ban-crack"></div>
+
+      <div class="charts" style="margin-top:1.3rem">
+
+        <figure class="chart-card">
+          <figcaption><span class="keyline" style="background:#2a78d6"></span> Trial division — the naive attack</figcaption>
+          <p class="chart-sub">Time to factor an n-bit modulus by testing every divisor up to √n, at 10⁹ divisions per second. The dot is your current key.</p>
+          <div class="plot-wrap" id="wrap-a" tabindex="0" role="img" aria-label="Line chart: time to factor by trial division against modulus size in bits.">
+            <div class="tip" id="tip-a"></div>
+          </div>
+          <button class="tbl-btn" type="button" data-table="tbl-a">Show data table</button>
+          <div class="data-table hidden" id="tbl-a"></div>
+          <p class="caption">
+            The x-axis is linear in bits, the y-axis is logarithmic in time — so this dead-straight line
+            <em>is</em> exponential growth. Every two extra bits of n double the attacker's work. Turn p and
+            q up in Stage 1 and watch the axis stretch to keep up.
+          </p>
+        </figure>
+
+        <figure class="chart-card">
+          <figcaption><span class="keyline" style="background:#eb6834"></span> Number field sieve — the real attack</figcaption>
+          <p class="chart-sub">The best factoring algorithm known, at real key sizes. Same kind of axes as the chart on the left — but this line <em>bends</em>, because the sieve is sub-exponential.</p>
+          <div class="plot-wrap" id="wrap-b" tabindex="0" role="img" aria-label="Line chart: core-years to factor by the general number field sieve against modulus size in bits.">
+            <div class="tip" id="tip-b"></div>
+          </div>
+          <button class="tbl-btn" type="button" data-table="tbl-b">Show data table</button>
+          <div class="data-table hidden" id="tbl-b"></div>
+          <p class="caption">
+            Cost model: L<sub>n</sub>[1/3, 1.923] = exp(1.923 · (ln n)<sup>1/3</sup> · (ln ln n)<sup>2/3</sup>),
+            calibrated so that 768 bits costs the ≈ 2,000 core-years actually spent factoring RSA-768 in 2009.
+            It is an order-of-magnitude estimate, and only meaningful for large n — which is why this curve
+            starts at 256 bits while the trial-division chart covers the small ones.
+          </p>
+        </figure>
+
+      </div>
+
+      <div class="banner wait" id="ban-sec-note" style="margin-top:1.3rem">
+        <strong>The gap between the two charts is the whole point.</strong> A better algorithm does not shave
+        a bit off the attack — at 2048 bits it collapses the work from about 10³⁰⁸ operations to about 10³²,
+        some 275 orders of magnitude. RSA is secure not because factoring is impossible, but because even the
+        best method anyone has found is still hopelessly far from feasible at the sizes we actually deploy.
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+"use strict";
+/* ==========================================================================
+   RSA INTERACTIVE VISUALIZER
+   --------------------------------------------------------------------------
+   Everything numeric below uses BigInt (the `n` suffix on literals, e.g. 2n).
+   This is deliberate: JavaScript's Number type is a 64-bit float and loses
+   precision above 2^53. A modular exponentiation like 88^7 already overflows
+   that on the way to the modulo, so plain Numbers would silently return the
+   WRONG ciphertext. BigInt is exact at any size.
+   ========================================================================== */
+
+/* ---------- Small BigInt helpers ------------------------------------------ */
+
+// Euclid's algorithm: gcd(a,b) = gcd(b, a mod b), stopping when b = 0.
+function gcd(a, b) {
+  a = a < 0n ? -a : a;
+  b = b < 0n ? -b : b;
+  while (b !== 0n) { const t = a % b; a = b; b = t; }
+  return a;
+}
+
+/* ---------- Primality test (Miller-Rabin over BigInt) ---------------------- */
+
+// Modular exponentiation used only *internally* by the primality test.
+// (The pedagogical, step-recording version lives in modPowSteps below.)
+function modPowFast(base, exp, mod) {
+  let result = 1n;
+  base %= mod;
+  while (exp > 0n) {
+    if (exp & 1n) result = (result * base) % mod;
+    base = (base * base) % mod;
+    exp >>= 1n;
+  }
+  return result;
+}
+
+// Deterministic Miller-Rabin for every n below 3.3 x 10^24 when these 12
+// witness bases are used; beyond that it is a very strong probable-prime test.
+// Idea: for a prime n, write n-1 = d*2^s. Then for any base a, either
+// a^d = 1 (mod n) or a^(d*2^r) = -1 (mod n) for some r < s. Any base that
+// violates this proves n is composite.
+const MR_BASES = [2n, 3n, 5n, 7n, 11n, 13n, 17n, 19n, 23n, 29n, 31n, 37n];
+
+function isPrime(n) {
+  if (n < 2n) return false;
+  for (const small of MR_BASES) {
+    if (n === small) return true;
+    if (n % small === 0n) return false;
+  }
+  let d = n - 1n, s = 0n;
+  while (d % 2n === 0n) { d /= 2n; s += 1n; }
+
+  for (const a of MR_BASES) {
+    let x = modPowFast(a, d, n);
+    if (x === 1n || x === n - 1n) continue;
+    let composite = true;
+    for (let r = 1n; r < s; r++) {
+      x = (x * x) % n;
+      if (x === n - 1n) { composite = false; break; }
+    }
+    if (composite) return false;
+  }
+  return true;
+}
+
+// Smallest non-trivial factor — used purely to explain *why* a number isn't prime.
+function smallestFactor(n) {
+  if (n % 2n === 0n) return 2n;
+  for (let i = 3n; i * i <= n; i += 2n) {
+    if (n % i === 0n) return i;
+    // Give up quickly on huge composites — this runs on every keystroke and the
+    // message just falls back to a generic "is not prime". 100k covers any
+    // realistic classroom typo.
+    if (i > 100000n) return null;
+  }
+  return null;
+}
+
+/* ---------- Extended Euclidean algorithm (Stallings' tabular form) --------- */
+
+// Solves for the multiplicative inverse of b modulo m.
+// Two triples are carried along, each satisfying  m*X1 + b*X2 = X3.
+// We keep reducing (exactly as in ordinary Euclid, where the third component is
+// the running remainder) until the remainder hits 1: then m*B1 + b*B2 = 1, and
+// taking that equation mod m leaves  b*B2 = 1 (mod m).  So B2 is the inverse.
+// If the remainder hits 0 first, gcd(m,b) > 1 and no inverse exists.
+function extendedEuclid(m, b) {
+  const rows = [];
+  let A1 = 1n, A2 = 0n, A3 = m;
+  let B1 = 0n, B2 = 1n, B3 = b;
+
+  rows.push({ Q: "—", A1, A2, A3, B1, B2, B3 });
+
+  let guard = 0;
+  while (true) {
+    if (B3 === 0n) return { inverse: null, gcd: A3, rows };          // no inverse
+    if (B3 === 1n) {
+      // B2 may be negative; normalise it into the range [0, m).
+      const inv = ((B2 % m) + m) % m;
+      return { inverse: inv, gcd: 1n, rows, rawB2: B2 };
+    }
+    const Q = A3 / B3;                                               // BigInt division truncates = floor for positives
+    const T1 = A1 - Q * B1, T2 = A2 - Q * B2, T3 = A3 - Q * B3;
+    A1 = B1; A2 = B2; A3 = B3;
+    B1 = T1; B2 = T2; B3 = T3;
+    rows.push({ Q, A1, A2, A3, B1, B2, B3 });
+    if (++guard > 5000) return { inverse: null, gcd: A3, rows };     // paranoia; cannot happen
+  }
+}
+
+/* ---------- Square-and-multiply modular exponentiation --------------------- */
+
+// Left-to-right binary exponentiation (Stallings Figure 9.8 / Tables 9.4-9.5).
+//
+// Write the exponent in binary, b_k b_(k-1) ... b_0. Scan those bits from the
+// MOST significant down. Maintain:
+//     c = the exponent built so far (the bits seen up to now)
+//     f = base^c mod n
+// For each new bit: SQUARE (which doubles c, i.e. shifts the exponent left),
+// then MULTIPLY by the base if the bit is 1 (which adds 1 to c).
+// After the last bit, c = the full exponent and f = base^exponent mod n.
+//
+// Cost: one squaring per bit instead of one multiplication per unit of the
+// exponent. 88^7 takes 3 rounds, not 7 multiplications; a 2048-bit exponent
+// takes ~2048 rounds instead of astronomically many. Every intermediate value
+// is reduced mod n immediately, so nothing ever grows beyond n^2.
+function modPowSteps(base, exponent, modulus) {
+  const bits = exponent.toString(2);        // binary string, most-significant bit first
+  const k = bits.length - 1;
+  const steps = [];
+  let c = 0n;                               // exponent accumulated so far
+  let f = 1n;                               // running result = base^c mod modulus
+  const b = ((base % modulus) + modulus) % modulus;
+
+  for (let idx = 0; idx < bits.length; idx++) {
+    const bit = bits[idx] === "1";
+    const fBefore = f;
+
+    c = 2n * c;                             // shift: the exponent so far doubles
+    const squared = (f * f) % modulus;      // SQUARE step
+    f = squared;
+
+    let multiplied = null;
+    if (bit) {
+      c = c + 1n;                           // this bit contributes 1
+      multiplied = (f * b) % modulus;       // MULTIPLY step
+      f = multiplied;
+    }
+    steps.push({ i: k - idx, bit: bit ? 1 : 0, c, f, fBefore, squared, multiplied });
+  }
+  return { result: f, steps, bits, base: b };
+}
+
+/* ==========================================================================
+   INPUT PARSING + VALIDATION
+   Every user-facing failure must produce a readable sentence, never NaN.
+   ========================================================================== */
+
+// Accepts only a plain non-negative decimal integer. Returns {ok, value|error}.
+function parseBig(raw, label) {
+  const s = String(raw).trim().replace(/[\s,_]/g, "");
+  if (s === "") return { ok: false, error: label + " is empty — enter a whole number." };
+  if (/^-/.test(s)) return { ok: false, error: label + " must not be negative." };
+  if (/[.,]|e|E/.test(raw.trim()) && !/^\d+$/.test(s))
+    return { ok: false, error: label + " must be a whole number (no decimals or exponents)." };
+  if (!/^\d+$/.test(s)) return { ok: false, error: label + " must contain digits only — “" + raw.trim() + "” is not an integer." };
+  if (s.length > 400) return { ok: false, error: label + " is unreasonably large for a classroom demo (max 400 digits)." };
+  return { ok: true, value: BigInt(s) };
+}
+
+/* ==========================================================================
+   DOM WIRING
+   ========================================================================== */
+
+const $ = (id) => document.getElementById(id);
+
+const inP = $("in-p"), inQ = $("in-q"), inE = $("in-e"), inM = $("in-m");
+
+const DEFAULTS = { p: "17", q: "11", e: "7", m: "88" };  // Stallings' worked example
+
+function setMsg(fieldId, msgId, text, kind) {
+  const field = $(fieldId), msg = $(msgId);
+  msg.textContent = text || "";
+  msg.className = "msg" + (kind ? " " + kind : "");
+  field.classList.toggle("invalid", kind === "error");
+}
+
+function show(el, text, cls) {
+  el.textContent = text;
+  el.className = "banner " + cls;
+}
+function hide(el) { el.classList.add("hidden"); }
+
+function setVal(id, text, dim) {
+  const el = $(id);
+  el.textContent = text;
+  el.parentElement.classList.toggle("dim", !!dim);
+}
+
+/* ---------- Renderers ------------------------------------------------------ */
+
+function renderEEA(res, phi, e) {
+  const t = $("tbl-eea");
+  const head =
+    "<thead><tr>" +
+    "<th class='left'>Step</th><th>Q</th><th>A1</th><th>A2</th><th>A3</th><th>B1</th><th>B2</th><th>B3</th>" +
+    "</tr></thead>";
+  const body = res.rows.map((r, i) => {
+    const last = i === res.rows.length - 1;
+    return "<tr class='" + (last ? "final" : "") + "'>" +
+      "<td class='left'>" + (i === 0 ? "init" : i) + "</td>" +
+      "<td>" + r.Q + "</td>" +
+      "<td>" + r.A1 + "</td><td>" + r.A2 + "</td><td>" + r.A3 + "</td>" +
+      "<td>" + r.B1 + "</td><td>" + r.B2 + "</td><td>" + r.B3 + "</td>" +
+      "</tr>";
+  }).join("");
+  t.innerHTML = head + "<tbody>" + body + "</tbody>";
+
+  const intro = $("eea-intro");
+  if (res.inverse !== null) {
+    const raw = res.rawB2;
+    const norm = raw < 0n
+      ? " B2 = " + raw + " is negative, so we add φ(n): " + raw + " + " + phi + " = " + res.inverse + "."
+      : "";
+    intro.innerHTML =
+      "Running Extended Euclid(m = φ(n) = <b>" + phi + "</b>, b = e = <b>" + e + "</b>). " +
+      "The last row has B3 = 1, so gcd = 1 and the inverse is B2." + norm +
+      " &nbsp;⇒&nbsp; <b>d = " + res.inverse + "</b>, and check: " +
+      e + " × " + res.inverse + " = " + (e * res.inverse) + " ≡ " +
+      ((e * res.inverse) % phi) + " (mod " + phi + ").";
+  } else {
+    intro.innerHTML =
+      "Running Extended Euclid(m = φ(n) = <b>" + phi + "</b>, b = e = <b>" + e + "</b>). " +
+      "B3 reached 0, so gcd(e, φ(n)) = <b>" + res.gcd + "</b> ≠ 1 and e has no inverse mod φ(n).";
+  }
+}
+
+const MAX_ROWS = 400;  // keep the DOM sane if someone types a large exponent
+
+// Renders the square-and-multiply trace as a Stallings-style table plus an
+// explicit arithmetic column so the class can see each multiplication.
+function renderModPow(containerId, run, label, baseName, expName, modulus) {
+  const c = $(containerId);
+  const s = run.steps;
+  const truncated = s.length > MAX_ROWS;
+  const shown = truncated ? s.slice(0, MAX_ROWS) : s;
+
+  const rows = shown.map((st) => {
+    const bitCls = st.bit ? "bit1" : "bit0";
+    let work = "f ← " + st.fBefore + "² mod " + modulus + " = " + st.squared;
+    if (st.bit) work += " &nbsp;→&nbsp; f ← " + st.squared + " × " + run.base + " mod " + modulus + " = " + st.multiplied;
+    return "<tr class='" + (st.bit ? "hit" : "") + "'>" +
+      "<td>" + st.i + "</td>" +
+      "<td class='" + bitCls + "'>" + st.bit + "</td>" +
+      "<td>" + st.c + "</td>" +
+      "<td>" + st.f + "</td>" +
+      "<td class='left'>" + work + "</td>" +
+      "</tr>";
+  }).join("");
+
+  c.innerHTML =
+    "<p class='caption'>Exponent " + expName + " = <b>" + run.steps.length + "</b>-bit binary: " +
+      "<span class='binary'>" + run.bits + "</span> &nbsp;(read left → right, most significant bit first)</p>" +
+    "<div class='table-wrap'><table>" +
+      "<thead><tr><th>i</th><th>bit b<sub>i</sub></th><th>c</th><th>f</th>" +
+      "<th class='left'>what happens (square, then multiply if b<sub>i</sub> = 1)</th></tr></thead>" +
+      "<tbody>" + rows + "</tbody>" +
+    "</table></div>" +
+    (truncated ? "<p class='caption'><b>Note:</b> only the first " + MAX_ROWS + " of " + s.length +
+       " rows are shown to keep the page responsive.</p>" : "") +
+    "<p class='caption'><b>c</b> is the exponent built up so far and <b>f</b> = " + baseName +
+      "<sup>c</sup> mod " + modulus + " — the invariant that makes the algorithm correct. " +
+      "Every row squares f (doubling c) and, when the bit is 1, multiplies by " + baseName +
+      " (adding 1 to c). Highlighted rows are the ones with a 1 bit. " +
+      "After the last row c = " + expName + ", so f is the answer: <b>" + label + " = " + run.result + "</b>.</p>";
+}
+
+function blankSteps(containerId, why) {
+  $(containerId).innerHTML = "<p class='caption'>" + why + "</p>";
+}
+
+/* ==========================================================================
+   MAIN REACTIVE UPDATE
+   Called on every keystroke. Validates each stage in order; when a stage fails
+   it explains why and every downstream stage is put into a clear "waiting"
+   state instead of showing stale or nonsense numbers.
+   ========================================================================== */
+
+// Whatever the last valid key material was this pass. Stage 4 reads it after
+// update() returns, so it works the same on every early-return path.
+let CURRENT = { n: null, e: null };
+
+function update() {
+  // --- reset banners ---
+  ["ban-keys", "ban-keyok", "ban-enc", "ban-dec-ok", "ban-dec-err", "ban-dec-wait"].forEach(id => hide($(id)));
+  CURRENT = { n: null, e: null };
+
+  /* ---------- Stage 1a: p and q ---------- */
+  const rp = parseBig(inP.value, "p");
+  const rq = parseBig(inQ.value, "q");
+
+  let pOk = false, qOk = false, p = null, q = null;
+
+  if (!rp.ok) {
+    setMsg("f-p", "msg-p", rp.error, "error");
+  } else if (!isPrime(rp.value)) {
+    const f = smallestFactor(rp.value);
+    setMsg("f-p", "msg-p",
+      rp.value < 2n ? "p = " + rp.value + " is not prime (primes are ≥ 2)."
+      : f ? "p = " + rp.value + " is not prime — it is divisible by " + f + "."
+          : "p = " + rp.value + " is not prime.", "error");
+  } else { p = rp.value; pOk = true; setMsg("f-p", "msg-p", "✓ " + p + " is prime.", "ok"); }
+
+  if (!rq.ok) {
+    setMsg("f-q", "msg-q", rq.error, "error");
+  } else if (!isPrime(rq.value)) {
+    const f = smallestFactor(rq.value);
+    setMsg("f-q", "msg-q",
+      rq.value < 2n ? "q = " + rq.value + " is not prime (primes are ≥ 2)."
+      : f ? "q = " + rq.value + " is not prime — it is divisible by " + f + "."
+          : "q = " + rq.value + " is not prime.", "error");
+  } else { q = rq.value; qOk = true; setMsg("f-q", "msg-q", "✓ " + q + " is prime.", "ok"); }
+
+  if (pOk && qOk && p === q) {
+    const err = "p and q must be different primes — with p = q, φ(n) is p(p−1), not (p−1)², and n = p² is trivially factored.";
+    setMsg("f-p", "msg-p", err, "error");
+    setMsg("f-q", "msg-q", err, "error");
+    pOk = qOk = false;
+  }
+
+  if (!pOk || !qOk) {
+    setVal("out-n", "—", true); setVal("out-phi", "—", true); setVal("out-d", "—", true);
+    $("f-n").textContent = "n = p × q";
+    $("f-phi").textContent = "φ(n) = (p−1)(q−1)";
+    $("out-pub").textContent = "{ e, n }";
+    $("out-priv").textContent = "{ d, n }";
+    setMsg("f-e", "msg-e", "Waiting for valid p and q.", null);
+    $("tbl-eea").innerHTML = "";
+    $("eea-intro").textContent = "Waiting for valid p, q and e.";
+    show($("ban-keys"), "Fix p and/or q above — key generation cannot continue.", "err");
+    blockEncryption("Key generation is incomplete, so there is no modulus n to encrypt with.");
+    return;
+  }
+
+  /* ---------- Stage 1b: n and φ(n) ---------- */
+  const n = p * q;
+  const phi = (p - 1n) * (q - 1n);
+  CURRENT.n = n;
+
+  setVal("out-n", n.toString(), false);
+  setVal("out-phi", phi.toString(), false);
+  $("f-n").textContent = "n = " + p + " × " + q;
+  $("f-phi").textContent = "φ(n) = " + (p - 1n) + " × " + (q - 1n);
+
+  /* ---------- Stage 1c: e ---------- */
+  const re = parseBig(inE.value, "e");
+  let e = null;
+
+  if (!re.ok) {
+    setMsg("f-e", "msg-e", re.error, "error");
+  } else if (re.value <= 1n) {
+    setMsg("f-e", "msg-e", "e = " + re.value + " is too small — e must satisfy 1 < e < φ(n) = " + phi + ".", "error");
+  } else if (re.value >= phi) {
+    setMsg("f-e", "msg-e", "e = " + re.value + " is too large — e must be strictly less than φ(n) = " + phi + ".", "error");
+  } else {
+    const g = gcd(re.value, phi);
+    if (g !== 1n) {
+      setMsg("f-e", "msg-e", "gcd(e, φ(n)) = gcd(" + re.value + ", " + phi + ") = " + g +
+        ", not 1 — e and φ(n) share the factor " + g + ", so e has no inverse mod φ(n).", "error");
+    } else {
+      e = re.value;
+      CURRENT.e = e;
+      setMsg("f-e", "msg-e", "✓ 1 < " + e + " < " + phi + " and gcd(" + e + ", " + phi + ") = 1.", "ok");
+    }
+  }
+
+  if (e === null) {
+    setVal("out-d", "—", true);
+    $("f-d").textContent = "e × d ≡ 1 (mod φ(n))";
+    $("out-pub").textContent = "{ e, " + n + " }";
+    $("out-priv").textContent = "{ d, " + n + " }";
+    $("tbl-eea").innerHTML = "";
+    $("eea-intro").textContent = "Waiting for a valid e.";
+    show($("ban-keys"), "Fix e above — the private exponent d cannot be derived.", "err");
+    blockEncryption("The key pair is incomplete, so no encryption exponent is available.");
+    return;
+  }
+
+  /* ---------- Stage 1d: d via extended Euclid ---------- */
+  const eea = extendedEuclid(phi, e);
+  renderEEA(eea, phi, e);
+
+  const d = eea.inverse;   // guaranteed non-null here, since gcd(e, phi) === 1
+  setVal("out-d", d.toString(), false);
+  $("f-d").textContent = e + " × " + d + " mod " + phi + " = " + ((e * d) % phi);
+
+  $("out-pub").textContent  = "{ " + e + ", " + n + " }";
+  $("out-priv").textContent = "{ " + d + ", " + n + " }";
+
+  show($("ban-keyok"),
+    "Key pair ready. Public {e = " + e + ", n = " + n + "}, private {d = " + d + ", n = " + n +
+    "}. Verification: e × d = " + (e * d) + " ≡ 1 (mod φ(n) = " + phi + ").", "ok");
+
+  /* ---------- Stage 2: encryption ---------- */
+  const rm = parseBig(inM.value, "M");
+  let M = null;
+
+  if (!rm.ok) {
+    setMsg("f-m", "msg-m", rm.error, "error");
+  } else if (rm.value >= n) {
+    setMsg("f-m", "msg-m", "M = " + rm.value + " is not less than n = " + n +
+      " — the message would wrap around mod n and could not be recovered uniquely. " +
+      "Split it into smaller blocks or choose larger primes.", "error");
+  } else {
+    M = rm.value;
+    setMsg("f-m", "msg-m", "✓ 0 ≤ " + M + " < " + n + ".", "ok");
+  }
+
+  if (M === null) {
+    setVal("out-c", "—", true);
+    $("f-c").innerHTML = "C = M<sup>e</sup> mod n";
+    blankSteps("enc-steps", "Waiting for a valid plaintext M.");
+    setVal("out-m2", "—", true);
+    $("f-m2").innerHTML = "M = C<sup>d</sup> mod n";
+    blankSteps("dec-steps", "Waiting for a valid ciphertext.");
+    show($("ban-enc"), "Fix M above — nothing to encrypt.", "err");
+    show($("ban-dec-wait"), "Decryption is waiting on a valid plaintext in Stage 2.", "wait");
+    return;
+  }
+
+  const enc = modPowSteps(M, e, n);
+  const C = enc.result;
+  setVal("out-c", C.toString(), false);
+  $("f-c").innerHTML = "C = " + M + "<sup>" + e + "</sup> mod " + n + " = " + C;
+  renderModPow("enc-steps", enc, "C", String(M), String(e), n);
+
+  /* ---------- Stage 3: decryption ---------- */
+  const dec = modPowSteps(C, d, n);
+  const recovered = dec.result;
+  setVal("out-m2", recovered.toString(), false);
+  $("f-m2").innerHTML = "M = " + C + "<sup>" + d + "</sup> mod " + n + " = " + recovered;
+  renderModPow("dec-steps", dec, "M", String(C), String(d), n);
+
+  if (recovered === M) {
+    show($("ban-dec-ok"),
+      "✓ Round trip verified: M = " + M + " → C = " + C + " → M = " + recovered +
+      ". The recovered plaintext equals the original, because e × d ≡ 1 (mod φ(n)).", "ok");
+  } else {
+    // Mathematically unreachable with valid parameters; kept as a safety net.
+    show($("ban-dec-err"),
+      "Recovered " + recovered + " but the original was " + M + ". Check the parameters above.", "err");
+  }
+}
+
+function blockEncryption(reason) {
+  setMsg("f-m", "msg-m", "Waiting for a valid key pair.", null);
+  setVal("out-c", "—", true);
+  $("f-c").innerHTML = "C = M<sup>e</sup> mod n";
+  setVal("out-m2", "—", true);
+  $("f-m2").innerHTML = "M = C<sup>d</sup> mod n";
+  blankSteps("enc-steps", reason);
+  blankSteps("dec-steps", reason);
+  show($("ban-enc"), reason, "err");
+  show($("ban-dec-wait"), "Decryption is waiting on Stages 1 and 2.", "wait");
+}
+
+/* ==========================================================================
+   STAGE 4 — HOW LONG WOULD IT TAKE TO BREAK THIS KEY?
+   --------------------------------------------------------------------------
+   Breaking RSA means factoring n. Once an attacker has p and q they get
+   φ(n) = (p-1)(q-1), and then d = e^-1 mod φ(n) by the very same extended
+   Euclid run from Stage 1. So "how secure is this key" = "how expensive is
+   factoring n", and that is what we model here.
+
+   All of the arithmetic below is in LOG SPACE (base 10). The honest numbers
+   run past 10^300, which overflows a JS double to Infinity, so we never form
+   them — we only ever add and compare their exponents.
+   ========================================================================== */
+
+const SECONDS_PER_YEAR = 3.15576e7;
+const OPS_PER_SEC      = 1e9;                        // one core, ~10^9 modular ops/sec
+const L10_OPS          = Math.log10(OPS_PER_SEC);
+const L10_YEAR         = Math.log10(SECONDS_PER_YEAR);
+const L10_UNIVERSE     = Math.log10(1.38e10 * SECONDS_PER_YEAR);  // 13.8 billion years, in log10 seconds
+
+// --- Attack 1: trial division ---------------------------------------------
+// The naive attacker tests every candidate divisor up to sqrt(n). For a k-bit
+// modulus that is about sqrt(2^k) = 2^(k/2) operations — so each extra bit of n
+// multiplies the attacker's work by sqrt(2), i.e. doubles it every two bits.
+function log10OpsTrial(bits) { return (bits / 2) * Math.log10(2); }
+
+// --- Attack 2: the general number field sieve ------------------------------
+// The best classical factoring algorithm known. Its cost is sub-exponential:
+//     L_n[1/3, c] = exp( c · (ln n)^(1/3) · (ln ln n)^(2/3) ),  c = (64/9)^(1/3)
+// The formula is asymptotic — it drops constant factors — so we calibrate it
+// against a real result: RSA-768 was actually factored in 2009 for about
+// 2,000 core-years. Everything else is scaled from that anchor, which keeps the
+// large-key estimates in line with the published literature (this calibration
+// reproduces ~2 million core-years for RSA-1024 and ~10^15 for RSA-2048).
+const GNFS_C = Math.cbrt(64 / 9);                    // ≈ 1.9229
+
+function rawLog10GNFS(bits) {
+  const lnN = bits * Math.LN2;                       // ln(n) for an n of `bits` bits
+  return (GNFS_C * Math.cbrt(lnN) * Math.pow(Math.log(lnN), 2 / 3)) / Math.LN10;
+}
+const GNFS_CALIBRATION =
+  Math.log10(2000 * SECONDS_PER_YEAR * OPS_PER_SEC) - rawLog10GNFS(768);
+
+function log10OpsGNFS(bits) { return rawLog10GNFS(bits) + GNFS_CALIBRATION; }
+
+// The sieve only makes sense for large moduli; below ~256 bits its asymptotics
+// are meaningless and simple trial division is the sensible attack.
+const GNFS_MIN_BITS = 256;
+
+// Cost of the best attack actually available at this size.
+function log10OpsBest(bits) {
+  const trial = log10OpsTrial(bits);
+  return bits >= GNFS_MIN_BITS ? Math.min(trial, log10OpsGNFS(bits)) : trial;
+}
+
+// A key is "infeasible" when the best known attack exceeds 10^12 core-years.
+// This threshold is what puts 1024-bit RSA on the wrong side of the line (about
+// 10^6 core-years) and 2048-bit comfortably on the right side (about 10^15) —
+// which is exactly where real-world guidance puts them.
+const INFEASIBLE_L10_YEARS = 12;
+
+/* ---------- Formatting extreme quantities ---------------------------------- */
+
+const SUPERS = { "-": "⁻", 0: "⁰", 1: "¹", 2: "²", 3: "³", 4: "⁴", 5: "⁵", 6: "⁶", 7: "⁷", 8: "⁸", 9: "⁹" };
+const sup = (s) => String(s).split("").map((c) => SUPERS[c] || c).join("");
+
+function trimNum(v) {
+  if (v >= 100) return Math.round(v).toLocaleString("en-US");
+  if (v >= 10)  return v.toFixed(0);
+  return v.toFixed(1).replace(/\.0$/, "");
+}
+
+// "1 years" and "1 milliseconds" read badly on a projected slide.
+function unit(numText, word) {
+  return numText + " " + (numText === "1" ? word.replace(/s$/, "") : word);
+}
+
+// log10(years) -> readable string
+function fmtYears(l10y) {
+  // Below about a tenth of a year, a decimal would round to a meaningless "0".
+  if (l10y < -1) return sciNotation(l10y) + " years";
+  if (l10y < 3) return unit(trimNum(Math.pow(10, l10y)), "years");
+  const scale = [[12, "trillion"], [9, "billion"], [6, "million"], [3, "thousand"]];
+  if (l10y < 15) {
+    for (const [exp, word] of scale) {
+      if (l10y >= exp) return trimNum(Math.pow(10, l10y - exp)) + " " + word + " years";
+    }
+  }
+  return sciNotation(l10y) + " years";
+}
+
+// Keep a mantissa in scientific notation, so a stat tile reading "2.8 × 10¹⁵
+// years" stays arithmetically consistent with the "× the age of the universe"
+// figure printed beside it.
+function sciNotation(l10) {
+  const exp = Math.floor(l10);
+  const mant = Math.pow(10, l10 - exp);
+  return (mant < 1.05 ? "" : trimNum(mant) + " × ") + "10" + sup(exp);
+}
+
+// log10(seconds) -> readable string, picking the largest unit that fits
+function fmtSeconds(l10s) {
+  if (!isFinite(l10s)) return "—";
+  if (l10s < -9.5) return "under a nanosecond";
+  const units = [
+    [-9, "nanoseconds"], [-6, "microseconds"], [-3, "milliseconds"], [0, "seconds"],
+    [Math.log10(60), "minutes"], [Math.log10(3600), "hours"], [Math.log10(86400), "days"],
+  ];
+  if (l10s >= L10_YEAR) return fmtYears(l10s - L10_YEAR);
+  let pick = units[0];
+  for (const u of units) if (l10s >= u[0]) pick = u;
+  return unit(trimNum(Math.pow(10, l10s - pick[0])), pick[1]);
+}
+
+// log10(operation count) -> readable string
+function fmtOps(l10) {
+  if (l10 < 6) return trimNum(Math.pow(10, l10)) + " operations";
+  return sciNotation(l10) + " operations";
+}
+
+// "×  the age of the universe", only when that comparison is meaningful
+function vsUniverse(l10s) {
+  const ratio = l10s - L10_UNIVERSE;
+  if (ratio < 0.5) return null;
+  return ratio < 6
+    ? "≈ " + trimNum(Math.pow(10, ratio)) + "× the age of the universe"
+    : "≈ 10" + sup(Math.round(ratio)) + "× the age of the universe";
+}
+
+/* ---------- The actual attack, run live ------------------------------------
+   We already know p and q — the attacker does not. Running genuine trial
+   division on n gives an honest operation count to show the class. Capped so a
+   large modulus can never freeze the page mid-demo. */
+const FACTOR_CAP = 200000;
+
+function factorByTrialDivision(n) {
+  let trials = 0;
+  if (n % 2n === 0n) return { factor: 2n, trials: 1, gaveUp: false };
+  for (let i = 3n; i * i <= n; i += 2n) {
+    trials++;
+    if (n % i === 0n) return { factor: i, trials: trials + 1, gaveUp: false };
+    if (trials >= FACTOR_CAP) return { factor: null, trials, gaveUp: true };
+  }
+  return { factor: null, trials: trials + 1, gaveUp: false };
+}
+
+/* ==========================================================================
+   CHART RENDERING — hand-rolled inline SVG, no libraries
+   ========================================================================== */
+
+const VB_W = 720, VB_H = 390;                        // SVG viewBox; scales to the card
+// The right margin has to hold the end label, and those get long at this scale
+// ("2.4 × 10²⁷ years"). Sized so the label is never clipped.
+const M = { l: 84, r: 152, t: 22, b: 50 };
+const PW = VB_W - M.l - M.r, PH = VB_H - M.t - M.b;
+
+const svgEsc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+// Candidate y-axis ticks, as log10(seconds). Natural time units read far better
+// than bare decades — nobody thinks in "10^7.5 seconds", everybody knows a year.
+function timeTicks(yMin, yMax) {
+  const base = [
+    [-9, "1 ns"], [-6, "1 µs"], [-3, "1 ms"], [0, "1 sec"],
+    [Math.log10(60), "1 min"], [Math.log10(3600), "1 hour"], [Math.log10(86400), "1 day"],
+    [L10_YEAR, "1 year"],
+  ];
+  for (let e = 3; e <= 300; e += 3) base.push([L10_YEAR + e, "10" + sup(e) + " yrs"]);
+  const inRange = base.filter(([l]) => l >= yMin && l <= yMax);
+  // Thin out so ticks never crowd: aim for at most 11 of them. Phase the stride
+  // on the "1 year" tick so that the most meaningful anchor is never the one
+  // that gets dropped.
+  const stride = Math.ceil(inRange.length / 11);
+  if (stride <= 1) return inRange;
+  let anchor = inRange.findIndex(([l]) => Math.abs(l - L10_YEAR) < 1e-9);
+  if (anchor < 0) anchor = 0;
+  return inRange.filter((_, i) => (i - anchor) % stride === 0);
+}
+
+// Evenly spaced round ticks for a linear axis.
+function linearTicks(min, max) {
+  const raw = (max - min) / 6;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= raw) || 10 * mag;
+  const out = [];
+  for (let v = Math.ceil(min / step) * step; v <= max + 1e-9; v += step) out.push(Math.round(v));
+  // Include the domain ends only when they will not crowd the nearest tick.
+  if (!out.length || out[0] - min >= step / 2) out.unshift(min);
+  if (max - out[out.length - 1] >= step / 2) out.push(max);
+  return out;
+}
+
+const chartRegistry = {};   // wrapId -> {samples, color, X, Y, seriesName}
+
+function renderChart(cfg) {
+  const { wrapId, tipId, color, samples, yMin, yMax, xMin, xMax, xTicks, refLines, markers, seriesName, endLabel } = cfg;
+  const wrap = $(wrapId);
+
+  // The x-axis is LINEAR in bits and the y-axis is logarithmic in time. That
+  // pairing is the whole visual argument: trial division costs 2^(k/2), so its
+  // log-time is linear in k and it plots as a dead-straight line — a straight
+  // line on a log scale IS exponential growth. The sieve, being sub-exponential,
+  // visibly bends away from straight on the same kind of axes.
+  const X = (bits) => M.l + ((bits - xMin) / (xMax - xMin)) * PW;
+  const Y = (l10s) => M.t + (1 - (l10s - yMin) / (yMax - yMin)) * PH;
+
+  const yTicks = timeTicks(yMin, yMax);
+  let s = "";
+
+  // Gridlines — solid hairlines, one step off the surface, deliberately recessive.
+  for (const [l, label] of yTicks) {
+    s += `<line x1="${M.l}" y1="${Y(l).toFixed(1)}" x2="${M.l + PW}" y2="${Y(l).toFixed(1)}" stroke="var(--grid)" stroke-width="1"/>`;
+    s += `<text x="${M.l - 10}" y="${(Y(l) + 5).toFixed(1)}" text-anchor="end" font-size="15" fill="var(--axis-ink)" font-variant-numeric="tabular-nums">${label}</text>`;
+  }
+
+  // Reference lines — labelled thresholds, distinct from the grid by weight + label.
+  // Labels sit at the LEFT edge: the series always ends at the right, so a
+  // right-aligned threshold label collides with the end label.
+  for (const ref of refLines || []) {
+    if (ref.y < yMin || ref.y > yMax) continue;
+    s += `<line x1="${M.l}" y1="${Y(ref.y).toFixed(1)}" x2="${M.l + PW}" y2="${Y(ref.y).toFixed(1)}" stroke="var(--axis-ink)" stroke-width="1.5" opacity="0.55"/>`;
+    s += `<text x="${M.l + 6}" y="${(Y(ref.y) - 7).toFixed(1)}" font-size="14" font-weight="700" fill="var(--axis-ink)">${svgEsc(ref.label)}</text>`;
+  }
+
+  // Baseline + x ticks
+  s += `<line x1="${M.l}" y1="${M.t + PH}" x2="${M.l + PW}" y2="${M.t + PH}" stroke="var(--axis)" stroke-width="1.5"/>`;
+  for (const b of xTicks) {
+    s += `<text x="${X(b).toFixed(1)}" y="${M.t + PH + 22}" text-anchor="middle" font-size="15" fill="var(--axis-ink)" font-variant-numeric="tabular-nums">${b}</text>`;
+  }
+  s += `<text x="${(M.l + PW / 2).toFixed(1)}" y="${VB_H - 8}" text-anchor="middle" font-size="15" font-weight="700" fill="var(--axis-ink)">size of n (bits)</text>`;
+
+  // The series: a single 2px line with round joins.
+  const d = samples.map((p, i) => (i ? "L" : "M") + X(p.bits).toFixed(1) + " " + Y(p.y).toFixed(1)).join(" ");
+  s += `<path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+
+  // A surface-coloured halo painted behind glyphs, so a label stays readable
+  // where it crosses the series line. This is text legibility, not a mark border.
+  const HALO = `paint-order="stroke" stroke="var(--surface-1)" stroke-width="3.5" stroke-linejoin="round"`;
+
+  // End dot + direct label (labelled selectively — the endpoint, not every point).
+  const last = samples[samples.length - 1];
+  s += `<circle cx="${X(last.bits).toFixed(1)}" cy="${Y(last.y).toFixed(1)}" r="5" fill="${color}" stroke="var(--surface-1)" stroke-width="2"/>`;
+  s += `<text x="${(X(last.bits) + 11).toFixed(1)}" y="${(Y(last.y) - 6).toFixed(1)}" font-size="15" font-weight="700" fill="var(--ink)" ${HALO}>${svgEsc(endLabel)}</text>`;
+  s += `<text x="${(X(last.bits) + 11).toFixed(1)}" y="${(Y(last.y) + 11).toFixed(1)}" font-size="13" fill="var(--axis-ink)" ${HALO}>at ${last.bits} bits</text>`;
+
+  // Markers (the user's live key, and the standard key sizes). Both label lines
+  // are stacked ABOVE the dot — running them either side of it lets the dot sit
+  // on top of the text.
+  for (const mk of markers || []) {
+    if (mk.bits < xMin || mk.bits > xMax) continue;
+    const mx = X(mk.bits), my = Y(mk.y);
+    s += `<line x1="${mx.toFixed(1)}" y1="${my.toFixed(1)}" x2="${mx.toFixed(1)}" y2="${M.t + PH}" stroke="var(--axis-ink)" stroke-width="1" opacity="0.5"/>`;
+    s += `<circle cx="${mx.toFixed(1)}" cy="${my.toFixed(1)}" r="6" fill="${color}" stroke="var(--surface-1)" stroke-width="2"/>`;
+    if (mk.label) {
+      const anchor = mx > M.l + PW * 0.6 ? "end" : "start";
+      const tx = mx + (anchor === "end" ? -11 : 11);
+      // `below` drops the pair under the dot, for markers whose natural spot
+      // above would land on a reference line.
+      const yTop = mk.below ? my + 22 : my - 26;
+      s += `<text x="${tx.toFixed(1)}" y="${yTop.toFixed(1)}" text-anchor="${anchor}" font-size="15" font-weight="700" fill="var(--ink)" ${HALO}>${svgEsc(mk.label)}</text>`;
+      if (mk.sublabel) {
+        s += `<text x="${tx.toFixed(1)}" y="${(yTop + 16).toFixed(1)}" text-anchor="${anchor}" font-size="13" fill="var(--axis-ink)" ${HALO}>${svgEsc(mk.sublabel)}</text>`;
+      }
+    }
+  }
+
+  // Hover layer (drawn last so it sits on top).
+  s += `<g id="${wrapId}-cross" style="display:none"><line stroke="var(--axis-ink)" stroke-width="1"/><circle r="6" fill="${color}" stroke="var(--surface-1)" stroke-width="2"/></g>`;
+  s += `<rect id="${wrapId}-hit" x="${M.l}" y="${M.t}" width="${PW}" height="${PH}" fill="transparent"/>`;
+
+  const tip = $(tipId);
+  wrap.innerHTML = `<svg viewBox="0 0 ${VB_W} ${VB_H}" preserveAspectRatio="xMidYMid meet">${s}</svg>`;
+  wrap.appendChild(tip);
+
+  chartRegistry[wrapId] = { samples, color, X, Y, seriesName, tipId, idx: -1 };
+  attachHover(wrapId);
+}
+
+// Crosshair + tooltip. The crosshair snaps to the nearest sample, so the reader
+// aims at a bit-size rather than at a 2px line; arrow keys do the same thing for
+// keyboard users, and every value here is also in the data table.
+function attachHover(wrapId) {
+  const reg = chartRegistry[wrapId];
+  const wrap = $(wrapId);
+  const svg = wrap.querySelector("svg");
+  const cross = svg.querySelector("#" + wrapId + "-cross");
+  const hit = svg.querySelector("#" + wrapId + "-hit");
+  const tip = $(reg.tipId);
+
+  function showAt(i) {
+    if (i < 0 || i >= reg.samples.length) return;
+    reg.idx = i;
+    const p = reg.samples[i];
+    const px = reg.X(p.bits), py = reg.Y(p.y);
+    cross.style.display = "";
+    cross.querySelector("line").setAttribute("x1", px.toFixed(1));
+    cross.querySelector("line").setAttribute("x2", px.toFixed(1));
+    cross.querySelector("line").setAttribute("y1", M.t);
+    cross.querySelector("line").setAttribute("y2", M.t + PH);
+    cross.querySelector("circle").setAttribute("cx", px.toFixed(1));
+    cross.querySelector("circle").setAttribute("cy", py.toFixed(1));
+
+    // Values lead, the label follows. Series names go in via textContent, never
+    // string-concatenated HTML. Split across short lines so the box stays narrow
+    // enough to fit inside the card on a phone-width screen.
+    tip.innerHTML = "";
+    const v = document.createElement("div");
+    v.className = "tv";
+    v.textContent = fmtSeconds(p.y);
+    const l = document.createElement("div");
+    l.className = "tl";
+    const key = document.createElement("span");
+    key.className = "tk";
+    key.style.background = reg.color;
+    l.appendChild(key);
+    l.appendChild(document.createTextNode(reg.seriesName + " · " + p.bits + "-bit n"));
+    const o = document.createElement("div");
+    o.className = "tl";
+    o.textContent = fmtOps(p.y + L10_OPS);
+    tip.appendChild(v);
+    tip.appendChild(l);
+    tip.appendChild(o);
+
+    // Position in pixels rather than percent so the box can be clamped inside
+    // the card — an un-clamped tooltip near either edge hangs off the panel and
+    // can widen the page.
+    tip.classList.add("on");
+    const wrapW = wrap.clientWidth, wrapH = wrap.clientHeight;
+    const half = tip.offsetWidth / 2;
+    const wantX = (px / VB_W) * wrapW;
+    tip.style.left = Math.round(Math.max(half + 2, Math.min(wrapW - half - 2, wantX))) + "px";
+    tip.style.top  = Math.round((py / VB_H) * wrapH) + "px";
+    tip.classList.toggle("below", py / VB_H < 0.28);   // flip down near the top
+  }
+  function clear() { cross.style.display = "none"; tip.classList.remove("on"); reg.idx = -1; }
+
+  function fromPointer(ev) {
+    const r = svg.getBoundingClientRect();
+    const vx = ((ev.clientX - r.left) / r.width) * VB_W;      // CSS px -> viewBox units
+    let best = 0, bestD = Infinity;
+    for (let i = 0; i < reg.samples.length; i++) {
+      const dd = Math.abs(reg.X(reg.samples[i].bits) - vx);
+      if (dd < bestD) { bestD = dd; best = i; }
+    }
+    showAt(best);
+  }
+
+  hit.addEventListener("pointermove", fromPointer);
+  hit.addEventListener("pointerdown", fromPointer);
+  wrap.addEventListener("pointerleave", clear);
+  wrap.addEventListener("blur", clear);
+  wrap.addEventListener("keydown", (ev) => {
+    if (ev.key === "ArrowRight" || ev.key === "ArrowLeft") {
+      ev.preventDefault();
+      const start = reg.idx < 0 ? Math.floor(reg.samples.length / 2) : reg.idx + (ev.key === "ArrowRight" ? 1 : -1);
+      showAt(Math.max(0, Math.min(reg.samples.length - 1, start)));
+    } else if (ev.key === "Escape") clear();
+  });
+}
+
+// Table view — the WCAG-clean twin. Nothing is reachable only by hovering.
+function renderDataTable(id, rows, header) {
+  const head = "<thead><tr>" + header.map((h, i) =>
+    `<th class="${i === 0 ? "left" : ""}">${svgEsc(h)}</th>`).join("") + "</tr></thead>";
+  const body = rows.map((r) => "<tr>" + r.map((c, i) =>
+    `<td class="${i === 0 ? "left" : ""}">${svgEsc(c)}</td>`).join("") + "</tr>").join("");
+  $(id).innerHTML = `<div class="table-wrap"><table>${head}<tbody>${body}</tbody></table></div>`;
+}
+
+/* ---------- Building the two charts ---------------------------------------- */
+
+function sampleCurve(minBits, maxBits, costFn, count) {
+  const out = [];
+  for (let i = 0; i <= count; i++) {
+    const bits = Math.round(minBits + ((maxBits - minBits) * i) / count);
+    if (out.length && out[out.length - 1].bits === bits) continue;
+    out.push({ bits, y: costFn(bits) - L10_OPS });   // log10 seconds at OPS_PER_SEC
+  }
+  return out;
+}
+
+function powersOfTwo(minBits, maxBits) {
+  const out = [];
+  for (let b = minBits; b <= maxBits; b *= 2) out.push(b);
+  if (out[out.length - 1] !== maxBits) out.push(maxBits);
+  return out;
+}
+
+// Chart A rescales as the user's key grows, so the live marker is always on
+// screen — turn p and q up and the axis follows.
+function renderChartA(bits) {
+  const minBits = 4;
+  let maxBits = 64;
+  while (maxBits < bits * 2 && maxBits < 4096) maxBits *= 2;
+
+  const samples = sampleCurve(minBits, maxBits, log10OpsTrial, 110);
+  const yMin = -9.4;
+  const yMax = log10OpsTrial(maxBits) - L10_OPS + 0.9;
+
+  const markers = [];
+  if (bits >= minBits && bits <= maxBits) {
+    const y = log10OpsTrial(bits) - L10_OPS;
+    markers.push({ bits, y, label: "your key: " + bits + " bits", sublabel: fmtSeconds(y) });
+  }
+
+  renderChart({
+    wrapId: "wrap-a", tipId: "tip-a", color: "#2a78d6",
+    samples, yMin, yMax, xMin: minBits, xMax: maxBits,
+    xTicks: linearTicks(minBits, maxBits),
+    refLines: [{ y: 0, label: "1 second" }, { y: Math.log10(86400), label: "1 day" },
+               { y: L10_YEAR, label: "1 year" }],
+    markers,
+    seriesName: "Trial division",
+    endLabel: fmtSeconds(samples[samples.length - 1].y),
+  });
+
+  renderDataTable("tbl-a",
+    powersOfTwo(8, Math.max(64, maxBits)).map((b) => {
+      const y = log10OpsTrial(b) - L10_OPS;
+      return [b + " bits", fmtOps(y + L10_OPS), fmtSeconds(y)];
+    }),
+    ["Size of n", "Divisions to try (≈ √n)", "Time at 10⁹/sec"]);
+}
+
+// Chart B is static — real key sizes do not depend on what the presenter types.
+function renderChartB() {
+  const minBits = GNFS_MIN_BITS, maxBits = 4096;
+  const samples = sampleCurve(minBits, maxBits, log10OpsGNFS, 110);
+  const yMin = samples[0].y - 1.2;
+  const yMax = samples[samples.length - 1].y + 1.2;
+
+  const markers = [1024, 2048].map((b) => ({
+    bits: b, y: log10OpsGNFS(b) - L10_OPS,
+    label: "RSA-" + b,
+    sublabel: fmtYears(log10OpsGNFS(b) - L10_OPS - L10_YEAR) + " of CPU",
+    below: b === 1024,        // above the 1024 dot is where the universe line runs
+  }));
+
+  renderChart({
+    wrapId: "wrap-b", tipId: "tip-b", color: "#eb6834",
+    samples, yMin, yMax, xMin: minBits, xMax: maxBits,
+    xTicks: [256, 1024, 2048, 3072, 4096],
+    refLines: [{ y: L10_UNIVERSE, label: "age of the universe" }],
+    markers,
+    seriesName: "Number field sieve",
+    endLabel: fmtSeconds(samples[samples.length - 1].y),
+  });
+
+  renderDataTable("tbl-b",
+    [256, 512, 768, 1024, 2048, 3072, 4096].map((b) => {
+      const y = log10OpsGNFS(b) - L10_OPS;
+      return [b + " bits", fmtOps(y + L10_OPS), fmtYears(y - L10_YEAR)];
+    }),
+    ["Size of n", "Sieve operations", "Core-years"]);
+}
+
+/* ---------- The reactive part of Stage 4 ----------------------------------- */
+
+function statTile(label, value, sub, cls, flag) {
+  return `<div class="stat ${cls || ""}">
+      <div class="lbl">${svgEsc(label)}</div>
+      <div class="num">${svgEsc(value)}</div>
+      ${flag ? `<div class="flag">${svgEsc(flag)}</div>` : ""}
+      <div class="sub">${sub}</div>
+    </div>`;
+}
+
+function renderSecurity() {
+  const kpi = $("kpi"), crack = $("ban-crack");
+
+  if (!CURRENT.n) {
+    kpi.innerHTML = statTile("Waiting", "—", "Fix the inputs in Stage 1 to see the cost of breaking this key.", "");
+    hide(crack);
+    renderChartA(0);
+    return;
+  }
+
+  const n = CURRENT.n, bits = n.toString(2).length;
+  const bestL10Ops = log10OpsBest(bits);
+  const bestL10Sec = bestL10Ops - L10_OPS;
+  const broken = bestL10Sec - L10_YEAR < INFEASIBLE_L10_YEARS;
+  const uni = vsUniverse(bestL10Sec);
+
+  const nStr = n.toString();
+  const nShort = nStr.length > 28 ? nStr.slice(0, 12) + "…" + nStr.slice(-8) + " (" + nStr.length + " digits)" : "n = " + nStr;
+
+  const rsa2048 = log10OpsGNFS(2048) - L10_OPS;
+
+  kpi.innerHTML =
+    statTile("Size of your modulus", bits + (bits === 1 ? " bit" : " bits"), svgEsc(nShort), "") +
+    statTile("Work to factor n", fmtOps(bestL10Ops),
+      bits >= GNFS_MIN_BITS ? "using the number field sieve" : "trial division up to √n") +
+    statTile("Time to break your key", fmtSeconds(bestL10Sec),
+      (uni ? svgEsc(uni) : "at 10⁹ operations per second"),
+      broken ? "critical" : "good",
+      broken ? "⚠ Not secure by modern standards" : "✓ Infeasible with known methods") +
+    statTile("RSA-2048, for scale", fmtYears(rsa2048 - L10_YEAR),
+      svgEsc(vsUniverse(rsa2048) || ""), "good", "✓ Today's standard");
+
+  // Actually run the attack on the presenter's key and report honest numbers.
+  if (bits <= 64) {
+    const res = factorByTrialDivision(n);
+    if (res.factor !== null) {
+      const other = n / res.factor;
+      const phiCracked = (res.factor - 1n) * (other - 1n);
+      // Only chase d when the public exponent is itself valid this pass.
+      const dCracked = (CURRENT.e !== null && gcd(CURRENT.e, phiCracked) === 1n)
+        ? extendedEuclid(phiCracked, CURRENT.e).inverse : null;
+      show(crack,
+        "Attack executed: factoring n = " + n + " by trial division took " + res.trials +
+        " division" + (res.trials === 1 ? "" : "s") + " and recovered p = " + res.factor + ", q = " + other +
+        ". From there φ(n) = " + phiCracked +
+        (dCracked !== null ? " and the private exponent d = " + dCracked + " — the whole private key, in " +
+          fmtSeconds(Math.log10(Math.max(res.trials, 1)) - L10_OPS) + " of CPU time." : "."), "err");
+      crack.classList.remove("hidden");
+    } else {
+      // The attack ran but hit the work cap — which is itself the lesson.
+      show(crack,
+        "Attack attempted: trial division on n = " + n + " gave up after " +
+        res.trials.toLocaleString("en-US") + " divisions without finding a factor. " +
+        "The numbers above are the model's estimate from here on.", "wait");
+      crack.classList.remove("hidden");
+    }
+  } else {
+    show(crack,
+      "Modulus is " + bits + " bits — far too large to factor live in the browser, so the figures above are " +
+      "the model's estimate rather than a measured run.", "wait");
+    crack.classList.remove("hidden");
+  }
+
+  renderChartA(bits);
+}
+
+/* ---------- Events --------------------------------------------------------- */
+
+// Data-table toggles for both charts.
+document.querySelectorAll(".tbl-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const t = $(btn.dataset.table);
+    const nowHidden = t.classList.toggle("hidden");
+    btn.textContent = nowHidden ? "Show data table" : "Hide data table";
+  });
+});
+
+// Reactive: any keystroke in any field recomputes the whole chain.
+// Wrapped in try/catch so a live demo can never end at a blank screen.
+function safeUpdate() {
+  try {
+    update();
+    renderSecurity();
+  } catch (err) {
+    const b = $("ban-keys");
+    show(b, "Unexpected error: " + (err && err.message ? err.message : err) +
+            " — press “Reset to textbook example” to recover.", "err");
+    b.classList.remove("hidden");
+  }
+}
+
+[inP, inQ, inE, inM].forEach(el => el.addEventListener("input", safeUpdate));
+
+$("resetBtn").addEventListener("click", () => {
+  inP.value = DEFAULTS.p; inQ.value = DEFAULTS.q;
+  inE.value = DEFAULTS.e; inM.value = DEFAULTS.m;
+  safeUpdate();
+});
+
+$("expandBtn").addEventListener("click", () => {
+  const dets = document.querySelectorAll("details.steps");
+  const anyClosed = Array.from(dets).some(d => !d.open);
+  dets.forEach(d => { d.open = anyClosed; });
+  $("expandBtn").textContent = anyClosed ? "Collapse all steps" : "Expand all steps";
+});
+
+// Chart B plots standard key sizes, which never change — render it once.
+renderChartB();
+
+// Initial render with the textbook defaults already in the markup.
+safeUpdate();
+</script>
+</body>
+</html>
